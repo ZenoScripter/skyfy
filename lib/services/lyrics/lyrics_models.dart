@@ -57,12 +57,22 @@ class LyricLine {
 /// [plain] is always usable text. [synced] is only set by providers that
 /// return timestamps (e.g. LRCLIB) and is sorted by start time.
 class Lyrics {
-  const Lyrics({required this.source, this.plain, this.synced});
+  const Lyrics({
+    required this.source,
+    this.plain,
+    this.synced,
+    this.trackDuration,
+  });
 
   /// Human readable provider name, e.g. `lrclib.net`.
   final String source;
   final String? plain;
   final List<LyricLine>? synced;
+
+  /// Length of the recording the timestamps were written for (LRCLIB gives
+  /// it). Compared with the audio that is really playing to detect intros the
+  /// lyrics file does not know about.
+  final Duration? trackDuration;
 
   bool get isSynced => synced != null && synced!.isNotEmpty;
 
@@ -94,4 +104,24 @@ class Lyrics {
     }
     return result;
   }
+}
+
+/// Offset (added to the audio position) that lines the timestamps of [lyrics]
+/// up with the audio that is playing.
+///
+/// When the audio is a few seconds longer than the recording the lyrics were
+/// timed for, the extra time is almost always an intro (music videos, lyric
+/// videos), so the vocals start later than the timestamps say and the lyrics
+/// must be delayed by the difference (a negative offset). Anything outside
+/// 3 to 45 seconds is treated as a different edit and left alone; the user
+/// can still fine-tune it and the correction is saved per song.
+Duration autoLyricsOffset(Lyrics lyrics, Duration? audioDuration) {
+  final track = lyrics.trackDuration;
+  if (track == null || audioDuration == null) return Duration.zero;
+  final diff = audioDuration - track;
+  if (diff >= const Duration(seconds: 3) &&
+      diff <= const Duration(seconds: 45)) {
+    return -diff;
+  }
+  return Duration.zero;
 }
