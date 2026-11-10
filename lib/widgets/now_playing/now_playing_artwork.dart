@@ -252,6 +252,7 @@ class _LyricsViewState extends State<_LyricsView> {
             if (lyrics.isSynced && syncedEnabled) {
               return SyncedLyricsView(
                 lyrics: lyrics,
+                songId: widget.metadata.id,
                 fontSize: widget.fullscreen ? 28 : 20,
                 textColor: textColor,
                 leftAlign: widget.fullscreen,
@@ -261,19 +262,42 @@ class _LyricsViewState extends State<_LyricsView> {
             return SingleChildScrollView(
               padding: const EdgeInsets.all(24),
               physics: const BouncingScrollPhysics(),
-              child: Text(
-                formatPlainLyrics(lyrics),
-                style: TextStyle(
-                  fontSize: widget.fullscreen ? 24 : 18,
-                  fontWeight: widget.fullscreen
-                      ? FontWeight.w700
-                      : FontWeight.w500,
-                  color: textColor,
-                  height: 1.6,
-                ),
-                textAlign: widget.fullscreen
-                    ? TextAlign.left
-                    : TextAlign.center,
+              child: Column(
+                crossAxisAlignment: widget.fullscreen
+                    ? CrossAxisAlignment.start
+                    : CrossAxisAlignment.center,
+                children: [
+                  if (!lyrics.isSynced) ...[
+                    Text(
+                      tt(
+                        'Lirik ini tidak punya timestamp, jadi tidak ikut bergerak bersama lagu.',
+                        'These lyrics have no timestamps, so they do not follow the song.',
+                      ),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: textColor.withValues(alpha: 0.6),
+                      ),
+                      textAlign: widget.fullscreen
+                          ? TextAlign.left
+                          : TextAlign.center,
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  Text(
+                    formatPlainLyrics(lyrics),
+                    style: TextStyle(
+                      fontSize: widget.fullscreen ? 24 : 18,
+                      fontWeight: widget.fullscreen
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: textColor,
+                      height: 1.6,
+                    ),
+                    textAlign: widget.fullscreen
+                        ? TextAlign.left
+                        : TextAlign.center,
+                  ),
+                ],
               ),
             );
           },

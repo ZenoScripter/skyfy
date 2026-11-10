@@ -22,6 +22,7 @@
 import 'dart:async';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:musify/main.dart';
 import 'package:musify/models/position_data.dart';
@@ -37,6 +38,7 @@ class SyncedLyricsView extends StatefulWidget {
     this.fontSize = 20,
     this.textColor,
     this.leftAlign = false,
+    this.songId,
   });
 
   final Lyrics lyrics;
@@ -49,6 +51,9 @@ class SyncedLyricsView extends StatefulWidget {
 
   /// Left aligns the lines instead of centering them.
   final bool leftAlign;
+
+  /// Used to remember the offset correction of each song.
+  final String? songId;
 
   @override
   State<SyncedLyricsView> createState() => _SyncedLyricsViewState();
@@ -63,6 +68,9 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
   List<GlobalKey> _lineKeys = const [];
   Duration _position = Duration.zero;
   Duration _offset = Duration.zero;
+  Duration _autoOffset = Duration.zero;
+  bool _hasSavedOffset = false;
+  bool _autoResolved = false;
   int _activeIndex = -1;
   DateTime _autoScrollResumesAt = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -72,10 +80,15 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
   void initState() {
     super.initState();
     _prepareLines();
+    _loadOffset();
     _position = audioHandler.currentPositionData.position;
+    _resolveAutoOffset(audioHandler.currentPositionData.duration);
     _activeIndex = _computeActiveIndex();
     _positionSubscription = audioHandler.positionDataStream.listen((data) {
       _position = data.position;
+      final before = _offset;
+      _resolveAutoOffset(data.duration);
+      if (_offset != before && mounted) setState(() {});
       _refreshActiveLine();
     });
     _scheduleScrollToActive(animate: false);
@@ -86,7 +99,8 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.lyrics, widget.lyrics)) {
       _prepareLines();
-      _offset = Duration.zero;
+      _loadOffset();
+      _resolveAutoOffset(audioHandler.currentPositionData.duration);
       _activeIndex = _computeActiveIndex();
       _scheduleScrollToActive(animate: false);
     }
@@ -96,6 +110,55 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
   void dispose() {
     unawaited(_positionSubscription?.cancel());
     super.dispose();
+  }
+
+  /// Saved correction of this song, or none.
+  Duration? _readSavedOffset() {
+    final id = widget.songId;
+    if (id == null || id.isEmpty) return null;
+    try {
+      final raw = Hive.box('settings').get('lyricsOffsets');
+      if (raw is Map) {
+        final value = raw[id];
+        if (value is int) return Duration(milliseconds: value);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  void _writeSavedOffset(Duration? value) {
+    final id = widget.songId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final box = Hive.box('settings');
+      final raw = box.get('lyricsOffsets');
+      final map = raw is Map
+          ? Map<String, dynamic>.from(raw)
+          : <String, dynamic>{};
+      map.remove(id);
+      if (value != null) map[id] = value.inMilliseconds;
+      while (map.length > 500) {
+        map.remove(map.keys.first);
+      }
+      unawaited(box.put('lyricsOffsets', map));
+    } catch (_) {}
+  }
+
+  void _loadOffset() {
+    final saved = _readSavedOffset();
+    _hasSavedOffset = saved != null;
+    _autoResolved = false;
+    _autoOffset = Duration.zero;
+    _offset = saved ?? Duration.zero;
+  }
+
+  /// Smart offset: once the real audio length is known, delay lyrics whose
+  /// timestamps were written for a shorter recording (see [autoLyricsOffset]).
+  void _resolveAutoOffset(Duration duration) {
+    if (_autoResolved || duration <= Duration.zero) return;
+    _autoResolved = true;
+    _autoOffset = autoLyricsOffset(widget.lyrics, duration);
+    if (!_hasSavedOffset) _offset = _autoOffset;
   }
 
   void _prepareLines() {
@@ -133,7 +196,16 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
 
   void _changeOffset(Duration delta) {
     setState(() {
-      _offset = delta == Duration.zero ? Duration.zero : _offset + delta;
+      if (delta == Duration.zero) {
+        // Back to the automatic value and forget the saved correction.
+        _offset = _autoOffset;
+        _hasSavedOffset = false;
+        _writeSavedOffset(null);
+      } else {
+        _offset += delta;
+        _hasSavedOffset = true;
+        _writeSavedOffset(_offset);
+      }
       _activeIndex = _computeActiveIndex();
     });
     _autoScrollResumesAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -149,7 +221,8 @@ class _SyncedLyricsViewState extends State<SyncedLyricsView> {
   String get _offsetLabel {
     if (_offset == Duration.zero) return '0.0s';
     final seconds = _offset.inMilliseconds / 1000;
-    return '${seconds > 0 ? '+' : ''}${seconds.toStringAsFixed(1)}s';
+    final auto = !_hasSavedOffset && _offset == _autoOffset ? ' auto' : '';
+    return '${seconds > 0 ? '+' : ''}${seconds.toStringAsFixed(1)}s$auto';
   }
 
   @override
