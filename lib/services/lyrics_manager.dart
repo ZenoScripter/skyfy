@@ -147,10 +147,16 @@ class LyricsManager {
           ? plainRaw
           : null;
 
+      final rawDuration = best['duration'];
+      final trackDuration = rawDuration is num && rawDuration > 0
+          ? Duration(milliseconds: (rawDuration * 1000).round())
+          : null;
+
       final lyrics = Lyrics(
         source: 'lrclib.net',
         plain: plain,
         synced: synced != null && synced.isNotEmpty ? synced : null,
+        trackDuration: trackDuration,
       );
       return lyrics.isEmpty ? null : lyrics;
     } catch (e, st) {

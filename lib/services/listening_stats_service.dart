@@ -52,6 +52,24 @@ class ListeningStatsService {
   bool _sessionQualified = false;
   bool _sessionLastAudioPlayerPlaying = false;
 
+  // Real audio position of the player. When bound, listening time is the
+  // amount the audio position actually advanced (never more than the wall
+  // clock time), so pauses, buffering, loading and seeks are not counted.
+  Duration Function()? _positionProvider;
+  Duration? _sessionLastPosition;
+
+  void bindPlayerPosition(Duration Function() provider) {
+    _positionProvider = provider;
+  }
+
+  Duration? _readPosition() {
+    try {
+      return _positionProvider?.call();
+    } catch (_) {
+      return null;
+    }
+  }
+
   bool get hasStats {
     final now = DateTime.now();
     final stats = _readStats(now);
@@ -178,6 +196,7 @@ class ListeningStatsService {
     _sessionListened = Duration.zero;
     _sessionQualified = false;
     _sessionLastTick = startedAt ?? DateTime.now();
+    _sessionLastPosition = _readPosition();
     // A session is started only once playback has begun, so mark it playing now;
     // otherwise ticks before the next playerState transition would be dropped.
     _sessionLastAudioPlayerPlaying = true;
@@ -204,6 +223,7 @@ class ListeningStatsService {
     }
 
     _sessionLastTick = DateTime.now();
+    _sessionLastPosition = _readPosition();
     _sessionLastAudioPlayerPlaying = true;
   }
 
@@ -214,12 +234,22 @@ class ListeningStatsService {
     final now = DateTime.now();
     final lastTick = _sessionLastTick;
     _sessionLastTick = now;
+    final position = _readPosition();
+    final lastPosition = _sessionLastPosition;
+    _sessionLastPosition = position;
     if (lastTick == null) return;
 
     final shouldCount = wasPlaying ?? _sessionLastAudioPlayerPlaying;
     if (!shouldCount) return;
 
-    final listenedDuration = now.difference(lastTick);
+    var listenedDuration = now.difference(lastTick);
+    if (position != null && lastPosition != null) {
+      final advanced = position - lastPosition;
+      // Audio did not move forward: paused, buffering, loading or a backward
+      // seek. Nothing was listened to.
+      if (advanced <= Duration.zero) return;
+      if (advanced < listenedDuration) listenedDuration = advanced;
+    }
     if (listenedDuration <= Duration.zero) return;
 
     if (!wrappedEnabled.value) {
@@ -256,10 +286,11 @@ class ListeningStatsService {
     Map? currentSong,
   }) {
     // just_audio keeps `playing` true after completion, so treat it as paused.
+    // Only a player that is ready and playing counts: not while loading or
+    // buffering (just_audio keeps `playing` true then), after completion, or
+    // after a playback error.
     final playing =
-        state.playing &&
-        state.processingState != ProcessingState.completed &&
-        state.processingState != ProcessingState.idle;
+        state.playing && state.processingState == ProcessingState.ready;
     if (playing == _sessionLastAudioPlayerPlaying) return;
 
     if (playing) {
@@ -289,6 +320,7 @@ class ListeningStatsService {
     _sessionDuration = null;
     _sessionListened = Duration.zero;
     _sessionLastTick = null;
+    _sessionLastPosition = null;
     _sessionQualified = false;
     _sessionLastAudioPlayerPlaying = false;
     if (flushStats) {

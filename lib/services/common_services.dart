@@ -667,7 +667,7 @@ String _normalizeArtistName(String name) {
       .replaceAll('- topic', '')
       .replaceAll('vevo', '')
       .replaceAll('official', '')
-      .replaceAll(RegExp(r'[^a-z0-9]'), '');
+      .replaceAll(RegExp('[^a-z0-9]'), '');
 }
 
 /// "Original Artist Mode": true when [song] comes from the artist's own
@@ -719,7 +719,7 @@ String normalizeSongTitle(String title) {
   t = t.replaceAll(RegExp(r'\(.*?\)|\[.*?\]'), ' ');
   t = t.replaceAll(_versionWordsRegExp, ' ');
   t = t.replaceAll(RegExp(r'\b(feat|ft)\b\.?.*$'), ' ');
-  return t.replaceAll(RegExp(r'[^a-z0-9]'), '');
+  return t.replaceAll(RegExp('[^a-z0-9]'), '');
 }
 
 /// "Original Version Mode": false for live / acoustic / remix / cover /

@@ -268,9 +268,14 @@ class MusifyAudioHandler extends BaseAudioHandler implements AndroidAutoHost {
       },
     );
 
+    listeningStatsService.bindPlayerPosition(() => audioPlayer.position);
+
+    // trailing: true keeps the LAST state of a burst of events. Without it a
+    // quick play -> pause could be dropped and the player would still be
+    // treated as playing.
     audioPlayer.playerStateStream
         .distinct()
-        .throttleTime(const Duration(milliseconds: 100))
+        .throttleTime(const Duration(milliseconds: 100), trailing: true)
         .listen(
           (state) {
             listeningStatsService.handlePlayerStateForListeningStats(
