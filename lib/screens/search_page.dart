@@ -348,7 +348,7 @@ class _SearchPageState extends State<SearchPage> {
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, animation) => SizeTransition(
                 sizeFactor: animation,
-                axisAlignment: -1,
+                alignment: Alignment.topCenter,
                 child: FadeTransition(opacity: animation, child: child),
               ),
               child: _hasResults

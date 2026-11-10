@@ -199,7 +199,7 @@ class _ThemePageState extends State<ThemePage> {
                         onChanged: (value) async {
                           await setFullBackground(value);
                           if (!mounted) return;
-                          Musify.updateAppState(context);
+                          await Musify.updateAppState(context);
                         },
                       ),
                     ],
